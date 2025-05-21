@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -14,6 +15,8 @@ import (
 
 type Whatsapp interface {
 	SendMessage(to string, message string) error
+	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) error
+	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) error
 	SendAudioToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendImageToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) error
@@ -76,6 +79,129 @@ func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) e
 		return fmt.Errorf("failed to send message, status code: %d, response: %s", resp.StatusCode, string(responseBody))
 	}
 
+	return nil
+}
+
+func (w *WhatsappClient) SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) error {
+	sections := []ListSection{
+		{
+			Rows: items,
+		},
+	}
+
+	interactive := ListInteractive{
+		Type: "list",
+		Body: BodyText{
+			Text: bodyText,
+		},
+		Action: ListAction{
+			Button:   buttonTitle,
+			Sections: sections,
+		},
+	}
+
+	message := WhatsAppMessage{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               recipientPhoneNumber,
+		Type:             "interactive",
+		Interactive:      interactive,
+	}
+
+	return w.sendListMessage(message)
+}
+
+func (w *WhatsappClient) SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) error {
+	action := ButtonAction{}
+	if menuType == "text" {
+		return w.SendMessage(recipientPhoneNumber, bodyText)
+	}
+
+	if menuType == "location_request_message" {
+		action.Name = "send_location"
+	}
+	for _, btn := range buttons {
+		if btn.Link != "" {
+
+			action.Name = "cta_url"
+			action.Parameters = &Parameters{
+				DisplayText: btn.Text,
+				Url:         btn.Link,
+			}
+		} else {
+			backBtn := struct {
+				Type  string      `json:"type"`
+				Reply ButtonReply `json:"reply"`
+			}{
+				Type: btn.Type,
+				Reply: ButtonReply{
+					ID:    btn.ID,
+					Title: btn.Text,
+				},
+			}
+
+			action.Buttons = append(action.Buttons, backBtn)
+		}
+	}
+
+	interactive := ButtonsInteractive{
+		Type: menuType,
+		Body: BodyText{
+			Text: bodyText,
+		},
+		Action: action,
+	}
+
+	message := WhatsAppMessage{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               recipientPhoneNumber,
+		Type:             "interactive",
+		Interactive:      interactive,
+	}
+
+	return w.sendListMessage(message)
+}
+
+func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) error {
+	jsonData, err := json.Marshal(message)
+	if err != nil {
+		fmt.Println("Ошибка кодирования JSON:", err)
+
+	}
+
+	log.Printf("JSON-сообщение: %s", string(jsonData))
+
+	req, err := http.NewRequest("POST", w.apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Println("Ошибка создания HTTP-запроса:", err)
+
+	}
+
+	// Устанавливаем заголовки
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+
+	// Выполняем HTTP-запрос
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Ошибка отправки HTTP-запроса:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Обрабатываем ответ
+	fmt.Println("Статус код:", resp.Status)
+
+	// Распарсиваем тело ответа (опционально, для отладки)
+	var response map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		fmt.Println("Ошибка декодирования JSON ответа:", err)
+
+	}
+	fmt.Println("Тело ответа:", response)
 	return nil
 }
 
