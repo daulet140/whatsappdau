@@ -56,9 +56,10 @@ func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) e
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+	token := fmt.Sprintf("Bearer %s", w.accessToken)
+	log.Printf("token: %s", token)
+	req.Header.Set("Authorization", token)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -178,11 +179,11 @@ func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) error {
 
 	}
 
-	// Устанавливаем заголовки
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+	token := fmt.Sprintf("Bearer %s", w.accessToken)
+	log.Printf("token: %s", token)
+	req.Header.Set("Authorization", token)
 
-	// Выполняем HTTP-запрос
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -191,10 +192,8 @@ func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) error {
 	}
 	defer resp.Body.Close()
 
-	// Обрабатываем ответ
 	fmt.Println("Статус код:", resp.Status)
 
-	// Распарсиваем тело ответа (опционально, для отладки)
 	var response map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	if err != nil {
@@ -306,7 +305,9 @@ func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) error
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+w.accessToken)
+	token := fmt.Sprintf("Bearer %s", w.accessToken)
+	log.Printf("token: %s", token)
+	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -341,7 +342,9 @@ func (w *WhatsappClient) sendWhatsAppImage(recipientPhone, mediaID string) error
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+w.accessToken)
+	token := fmt.Sprintf("Bearer %s", w.accessToken)
+	log.Printf("token: %s", token)
+	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -380,7 +383,9 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+w.accessToken)
+	token := fmt.Sprintf("Bearer %s", w.accessToken)
+	log.Printf("token: %s", token)
+	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
