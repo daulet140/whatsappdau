@@ -29,6 +29,8 @@ type WhatsappClient struct {
 }
 
 func NewWhatsappClient(ctx context.Context, apiURL string, accessToken string) Whatsapp {
+	log.Printf("apiURL: %s", apiURL)
+	log.Printf("accessToken: %s", accessToken)
 	return &WhatsappClient{
 		Ctx:         ctx,
 		apiURL:      apiURL,
