@@ -14,12 +14,12 @@ import (
 )
 
 type Whatsapp interface {
-	SendMessage(to string, message string) error
-	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) error
-	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) error
+	SendMessage(to string, message string) (*MessageResponse, error)
+	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) (*MessageResponse, error)
+	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) (*MessageResponse, error)
 	SendAudioToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendImageToWhatsApp(recipientWAID string, filePath string) (string, error)
-	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) error
+	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) (*MessageResponse, error)
 }
 
 type WhatsappClient struct {
@@ -38,7 +38,7 @@ func NewWhatsappClient(ctx context.Context, apiURL string, accessToken string) W
 	}
 }
 
-func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) error {
+func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) (*MessageResponse, error) {
 	messageData := map[string]interface{}{
 		"messaging_product": "whatsapp",
 		"recipient_type":    "individual",
@@ -51,12 +51,12 @@ func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) e
 
 	jsonData, err := json.Marshal(messageData)
 	if err != nil {
-		return fmt.Errorf("error marshaling JSON: %w", err)
+		return nil, fmt.Errorf("error marshaling JSON: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", w.apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("error creating request: %w", err)
+		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	token := fmt.Sprintf("Bearer %s", w.accessToken)
@@ -66,26 +66,30 @@ func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) e
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("error sending request: %w", err)
+		return nil, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body: %w", err)
+		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
 	fmt.Printf("WhatsApp API Response Status: %d\n", resp.StatusCode)
 	fmt.Printf("WhatsApp API Response Body: %s\n", string(responseBody))
-
+	var messageResponse MessageResponse
+	err = json.Unmarshal(responseBody, &messageResponse)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling JSON: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("failed to send message, status code: %d, response: %s", resp.StatusCode, string(responseBody))
+		return nil, fmt.Errorf("failed to send message, status code: %d, response: %s", resp.StatusCode, string(responseBody))
 	}
 
-	return nil
+	return &messageResponse, nil
 }
 
-func (w *WhatsappClient) SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) error {
+func (w *WhatsappClient) SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) (*MessageResponse, error) {
 	sections := []ListSection{
 		{
 			Rows: items,
@@ -114,7 +118,7 @@ func (w *WhatsappClient) SendInteractiveList(recipientPhoneNumber string, bodyTe
 	return w.sendListMessage(message)
 }
 
-func (w *WhatsappClient) SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) error {
+func (w *WhatsappClient) SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) (*MessageResponse, error) {
 	action := ButtonAction{}
 	if menuType == "text" {
 		return w.SendMessage(recipientPhoneNumber, bodyText)
@@ -166,7 +170,7 @@ func (w *WhatsappClient) SendInteractiveButtons(recipientPhoneNumber string, men
 	return w.sendListMessage(message)
 }
 
-func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) error {
+func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) (*MessageResponse, error) {
 	jsonData, err := json.Marshal(message)
 	if err != nil {
 		fmt.Println("Ошибка кодирования JSON:", err)
@@ -190,20 +194,20 @@ func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("Ошибка отправки HTTP-запроса:", err)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	fmt.Println("Статус код:", resp.Status)
 
-	var response map[string]interface{}
+	var response MessageResponse
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	if err != nil {
 		fmt.Println("Ошибка декодирования JSON ответа:", err)
 
 	}
 	fmt.Println("Тело ответа:", response)
-	return nil
+	return &response, nil
 }
 
 func (w *WhatsappClient) SendAudioToWhatsApp(recipientWAID string, filePath string) (string, error) {
@@ -212,7 +216,7 @@ func (w *WhatsappClient) SendAudioToWhatsApp(recipientWAID string, filePath stri
 		return "", err
 	}
 
-	err = w.sendWhatsAppMedia(recipientWAID, mediaId)
+	_, err = w.sendWhatsAppMedia(recipientWAID, mediaId)
 	if err != nil {
 		return "", err
 	}
@@ -289,7 +293,7 @@ func (w *WhatsappClient) uploadMedia(filePath, mediaType string) (string, error)
 	return response.ID, nil
 }
 
-func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) error {
+func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) (*MessageResponse, error) {
 
 	message := AudioMessage{
 		MessagingProduct: "whatsapp",
@@ -300,12 +304,12 @@ func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) error
 
 	body, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %v", err)
+		return nil, fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", w.apiURL, bytes.NewBuffer(body))
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %v", err)
+		return nil, fmt.Errorf("failed to create HTTP request: %v", err)
 	}
 	token := fmt.Sprintf("Bearer %s", w.accessToken)
 	log.Printf("token: %s", token)
@@ -315,16 +319,21 @@ func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) error
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send HTTP request: %v", err)
+		return nil, fmt.Errorf("failed to send HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("error: received status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("error: received status code %d", resp.StatusCode)
 	}
-
+	var response MessageResponse
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		fmt.Println("Ошибка декодирования JSON ответа:", err)
+		return nil, err
+	}
 	fmt.Println("Audio sent successfully!")
-	return nil
+	return &response, nil
 }
 
 func (w *WhatsappClient) sendWhatsAppImage(recipientPhone, mediaID string) error {
@@ -365,7 +374,7 @@ func (w *WhatsappClient) sendWhatsAppImage(recipientPhone, mediaID string) error
 	return nil
 }
 
-func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) error {
+func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) (*MessageResponse, error) {
 	message := LocationMessage{
 		MessagingProduct: "whatsapp",
 		To:               recipientPhone,
@@ -378,12 +387,12 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 
 	body, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %v", err)
+		return nil, fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", w.apiURL, bytes.NewBuffer(body))
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %v", err)
+		return nil, fmt.Errorf("failed to create HTTP request: %v", err)
 	}
 	token := fmt.Sprintf("Bearer %s", w.accessToken)
 	log.Printf("token: %s", token)
@@ -393,15 +402,23 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send HTTP request: %v", err)
+		return nil, fmt.Errorf("failed to send HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("error: received status code %d - %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("error: received status code %d - %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	fmt.Println("Location sent successfully!")
-	return nil
+
+	var response MessageResponse
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		fmt.Println("Ошибка декодирования JSON ответа:", err)
+		return nil, err
+	}
+
+	return &response, nil
 }
