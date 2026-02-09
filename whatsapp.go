@@ -15,11 +15,12 @@ import (
 
 type Whatsapp interface {
 	SendMessage(to string, message string) (*MessageResponse, error)
-	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) (*MessageResponse, error)
-	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) (*MessageResponse, error)
 	SendAudioToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendImageToWhatsApp(recipientWAID string, filePath string) (string, error)
+	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) (*MessageResponse, error)
 	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) (*MessageResponse, error)
+	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) (*MessageResponse, error)
+
 	GetMediaURL(mediaID string) (*MediaUrl, error)
 	DownloadMedia(mediaUrl string) ([]byte, error)
 }
@@ -423,7 +424,7 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 }
 func (w *WhatsappClient) GetMediaURL(mediaID string) (*MediaUrl, error) {
 	var mediaUrl MediaUrl
-	url := fmt.Sprintf("%s/%s", "https://graph.facebook.com/v17.0/%s", mediaID)
+	url := fmt.Sprintf("%s/%s", "https://graph.facebook.com/v17.0", mediaID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
