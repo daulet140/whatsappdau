@@ -20,7 +20,7 @@ type Whatsapp interface {
 	SendInteractiveList(recipientPhoneNumber string, bodyText string, buttonTitle string, items []ListItem) (*MessageResponse, error)
 	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) (*MessageResponse, error)
 	SendInteractiveButtons(recipientPhoneNumber string, menuType, bodyText string, buttons []ButtonItem) (*MessageResponse, error)
-
+	MessageRead(messageID string) error
 	GetMediaURL(mediaID string) (*MediaUrl, error)
 	DownloadMedia(mediaUrl string) ([]byte, error)
 }
@@ -464,4 +464,36 @@ func (w *WhatsappClient) DownloadMedia(mediaUrl string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func (w *WhatsappClient) MessageRead(messageID string) error {
+	var request = MessageStatus{
+		MessagingProduct: "whatsapp",
+		Status:           "read",
+		MessageId:        messageID,
+	}
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+	url := fmt.Sprintf("%s/%s", "https://graph.facebook.com/v17.0", messageID)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("error: received status code %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
 }

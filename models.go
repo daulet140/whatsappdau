@@ -98,3 +98,8 @@ type ButtonsInteractive struct {
 	Body   BodyText     `json:"body"`
 	Action ButtonAction `json:"action,omitempty"`
 }
+type MessageStatus struct {
+	MessagingProduct string `json:"messaging_product"`
+	Status           string `json:"status"`
+	MessageId        string `json:"message_id"`
+}
