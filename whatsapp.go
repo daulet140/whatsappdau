@@ -20,21 +20,25 @@ type Whatsapp interface {
 	SendAudioToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendImageToWhatsApp(recipientWAID string, filePath string) (string, error)
 	SendWhatsAppLocation(recipientPhone string, latitude, longitude float64, name, address string) (*MessageResponse, error)
+	GetMediaURL(mediaID string) (*MediaUrl, error)
+	DownloadMedia(mediaUrl string) ([]byte, error)
 }
 
 type WhatsappClient struct {
 	Ctx         context.Context
 	apiURL      string
 	accessToken string
+	client      *http.Client
 }
 
-func NewWhatsappClient(ctx context.Context, apiURL string, accessToken string) Whatsapp {
+func NewWhatsappClient(ctx context.Context, apiURL string, accessToken string, client *http.Client) Whatsapp {
 	log.Printf("apiURL: %s", apiURL)
 	log.Printf("accessToken: %s", accessToken)
 	return &WhatsappClient{
 		Ctx:         ctx,
 		apiURL:      apiURL,
 		accessToken: accessToken,
+		client:      client,
 	}
 }
 
@@ -63,8 +67,7 @@ func (w *WhatsappClient) SendMessage(recipientWAID string, messageBody string) (
 	log.Printf("token: %s", token)
 	req.Header.Set("Authorization", token)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
@@ -190,8 +193,7 @@ func (w *WhatsappClient) sendListMessage(message WhatsAppMessage) (*MessageRespo
 	log.Printf("token: %s", token)
 	req.Header.Set("Authorization", token)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		fmt.Println("Ошибка отправки HTTP-запроса:", err)
 		return nil, err
@@ -271,7 +273,7 @@ func (w *WhatsappClient) uploadMedia(filePath, mediaType string) (string, error)
 	req.Header.Set("Authorization", "Bearer "+w.accessToken)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("upload failed: %v", err)
 	}
@@ -316,8 +318,7 @@ func (w *WhatsappClient) sendWhatsAppMedia(recipientPhone, mediaID string) (*Mes
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send HTTP request: %v", err)
 	}
@@ -358,8 +359,7 @@ func (w *WhatsappClient) sendWhatsAppImage(recipientPhone, mediaID string) error
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send HTTP request: %v", err)
 	}
@@ -399,8 +399,7 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send HTTP request: %v", err)
 	}
@@ -421,4 +420,47 @@ func (w *WhatsappClient) SendWhatsAppLocation(recipientPhone string, latitude, l
 	}
 
 	return &response, nil
+}
+func (w *WhatsappClient) GetMediaURL(mediaID string) (*MediaUrl, error) {
+	var mediaUrl MediaUrl
+	url := fmt.Sprintf("%s/%s", "https://graph.facebook.com/v17.0/%s", mediaID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(&mediaUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mediaUrl, nil
+}
+
+func (w *WhatsappClient) DownloadMedia(mediaUrl string) ([]byte, error) {
+	req, err := http.NewRequest("GET", mediaUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.accessToken))
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
 }
